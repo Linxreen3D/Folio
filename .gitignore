@@ -1,0 +1,5 @@
+raw/
+mtgjson/
+_site/
+__pycache__/
+*.pyc

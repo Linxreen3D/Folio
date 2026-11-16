@@ -1,0 +1,92 @@
+# Foilio: tägliche Preise, neue Karten und Veröffentlichung der Website.
+# Läuft kostenlos auf GitHub Actions, ganz ohne KI.
+name: Tägliche Preise und neue Karten
+
+on:
+  schedule:
+    - cron: "23 4 * * *"   # täglich 04:23 UTC (05:23 Wien im Winter, 06:23 im Sommer)
+  workflow_dispatch:        # per Knopfdruck: Actions → dieser Workflow → Run workflow
+  push:
+    branches: [main]
+    paths: ["site/**", "tools/**", ".github/workflows/daily.yml"]
+
+permissions:
+  contents: write   # Preisverlauf ins Repository sichern
+  pages: write      # Website veröffentlichen
+  id-token: write
+
+concurrency:
+  group: daily-prices
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Abhängigkeiten
+        run: pip install pillow ijson
+
+      - name: Kartenbilder aus dem letzten Lauf wiederverwenden
+        uses: actions/cache@v4
+        with:
+          path: raw/thumbs
+          key: thumbs-${{ github.run_id }}
+          restore-keys: thumbs-
+
+      - name: Karten und Preise holen (TCGdex, Scryfall, YGOPRODeck, Lorcast, One Piece)
+        run: |
+          mkdir -p raw mtgjson _site/data
+          python tools/pkm_fetch.py raw --refresh-prices
+          python tools/others_fetch.py raw mtg ygo lor op
+          python tools/build_catalog.py raw _site/data
+
+      - name: Echten Preisverlauf fortschreiben
+        run: |
+          mkdir -p _site/data/hist
+          cp data/hist/*.json _site/data/hist/
+          python tools/update_history.py _site/data
+          curl -sSfo mtgjson/AllPrices.json.xz https://mtgjson.com/api/v5/AllPrices.json.xz
+          curl -sSfo mtgjson/AllPrintings.sqlite.xz https://mtgjson.com/api/v5/AllPrintings.sqlite.xz
+          xz -d mtgjson/AllPrintings.sqlite.xz
+          python tools/mtgjson_backfill.py mtgjson _site/data
+          cp _site/data/hist/*.json data/hist/
+          python tools/split_history.py _site/data
+
+      - name: Kartenbilder (Sprites) erzeugen
+        run: python tools/sprites.py raw _site/data
+
+      - name: Website zusammenstellen
+        run: |
+          cp -r site/* _site/
+          mkdir -p _site/tools
+          for f in tools/*.py; do cp "$f" "_site/tools/$(basename "$f").txt"; done
+          cp .github/workflows/daily.yml _site/tools/daily-prices.yml.txt
+
+      - name: Preisverlauf im Repository sichern
+        run: |
+          git config user.name "foilio-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/hist
+          git diff --cached --quiet || git commit -m "Preisverlauf $(date -u +%F)"
+          git push
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
