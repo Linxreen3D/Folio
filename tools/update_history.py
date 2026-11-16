@@ -32,6 +32,7 @@ def update(name, today):  # today: {id: price}
     return len(today), n
 
 for g in ("pkm", "mtg", "ygo", "lor", "op"):
+    if not os.path.exists(os.path.join(OUT, g + ".json")): print(g, "skipped (no catalog today)"); continue
     d = json.load(open(os.path.join(OUT, g + ".json")))
     today = {r[0]: r[6] for r in d["cards"] if not r[7] and r[6]}  # r[7] = estimate flag
     print(g, *update(g, today))

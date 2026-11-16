@@ -33,27 +33,34 @@ REV = {v: k for k, v in CURATED.items()}
 
 games = {}
 # ---------------- Pokémon ----------------
-en = json.load(open(f"{RAW}/tcg_cards_en.json")); de = {c["id"]: c["name"] for c in json.load(open(f"{RAW}/tcg_cards_de.json"))}
-det = json.load(open(f"{RAW}/tcg_details.json")); meta = json.load(open(f"{RAW}/tcg_setmeta.json"))
-serie = {}
-for f in os.listdir(RAW):
-    if f.startswith("tcg_serie_") and f != "tcg_series_en.json":
-        d = json.load(open(f"{RAW}/{f}"))
-        for st in d.get("sets", []): serie[st["id"]] = (d["id"], d["name"])
-sets, cards = {}, []
-for c in en:
-    if c["id"] not in det: continue
-    sid = c["id"].rsplit("-", 1)[0]; m = meta.get(sid) or {}; dd = det[c["id"]]
-    if sid not in sets: sets[sid] = {"k": sid, "n": m.get("name") or sid, "c": m.get("code") or sid.upper(), "d": m.get("date"), "t": m.get("total"), "s": (serie.get(sid) or ("", ""))[1]}
-    price = next((v for v in (dd.get("t"), dd.get("th"), dd.get("a30"), dd.get("a7"), dd.get("lo")) if v), None)
-    nm_de = de.get(c["id"]); nm_en = c["name"]
-    lang = "de" if nm_de else "en"
-    cards.append({"id": "p-" + slug(c["id"]), "name": nm_de or nm_en, "en": nm_en if nm_de and nm_de != nm_en else "", "set": sid, "no": c["localId"], "r": dd.get("r") or "",
-                  "p": price, "a30": dd.get("a30"), "a7": dd.get("a7"), "a1": dd.get("a1"), "lo": dd.get("lo"),
-                  "img": f"https://assets.tcgdex.net/{lang}/{(serie.get(sid) or ('misc',))[0]}/{sid}/{c['localId']}/low.webp"})
-games["pkm"] = (list(sets.values()), cards)
+def have(*names):
+    miss = [n for n in names if not os.path.exists(f"{RAW}/{n}")]
+    if miss: print("WARNING: skipping game, raw data missing:", miss, flush=True)
+    return not miss
+if have("tcg_cards_en.json", "tcg_cards_de.json", "tcg_details.json", "tcg_setmeta.json"):
+    en = json.load(open(f"{RAW}/tcg_cards_en.json")); de = {c["id"]: c["name"] for c in json.load(open(f"{RAW}/tcg_cards_de.json"))}
+    det = json.load(open(f"{RAW}/tcg_details.json")); meta = json.load(open(f"{RAW}/tcg_setmeta.json"))
+    serie = {}
+    for f in os.listdir(RAW):
+        if f.startswith("tcg_serie_") and f != "tcg_series_en.json":
+            d = json.load(open(f"{RAW}/{f}"))
+            for st in d.get("sets", []): serie[st["id"]] = (d["id"], d["name"])
+    sets, cards = {}, []
+    for c in en:
+        if c["id"] not in det: continue
+        sid = c["id"].rsplit("-", 1)[0]; m = meta.get(sid) or {}; dd = det[c["id"]]
+        if sid not in sets: sets[sid] = {"k": sid, "n": m.get("name") or sid, "c": m.get("code") or sid.upper(), "d": m.get("date"), "t": m.get("total"), "s": (serie.get(sid) or ("", ""))[1]}
+        price = next((v for v in (dd.get("t"), dd.get("th"), dd.get("a30"), dd.get("a7"), dd.get("lo")) if v), None)
+        nm_de = de.get(c["id"]); nm_en = c["name"]
+        lang = "de" if nm_de else "en"
+        cards.append({"id": "p-" + slug(c["id"]), "name": nm_de or nm_en, "en": nm_en if nm_de and nm_de != nm_en else "", "set": sid, "no": c["localId"], "r": dd.get("r") or "",
+                      "p": price, "a30": dd.get("a30"), "a7": dd.get("a7"), "a1": dd.get("a1"), "lo": dd.get("lo"),
+                      "img": f"https://assets.tcgdex.net/{lang}/{(serie.get(sid) or ('misc',))[0]}/{sid}/{c['localId']}/low.webp"})
+    games["pkm"] = (list(sets.values()), cards)
+
 # ---------------- others ----------------
 for g, pre in (("mtg", "m"), ("ygo", "y"), ("lor", "l"), ("op", "o")):
+    if not have(f"{g}_norm.json"): continue
     n = json.load(open(f"{RAW}/{g}_norm.json"))
     for c in n["cards"]:
         c["id"] = pre + "-" + (slug(c["id"]) if g in ("ygo", "op") else slug(c["set"] + "-" + str(c["no"])))

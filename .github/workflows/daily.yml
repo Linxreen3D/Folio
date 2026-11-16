@@ -36,7 +36,7 @@ jobs:
       # Rohdaten und Kartenbilder des letzten erfolgreichen Laufs: fällt eine Quelle aus,
       # wird ihr letzter Stand verwendet statt den ganzen Lauf abzubrechen.
       - name: Rohdaten des letzten Laufs wiederherstellen
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: raw
           key: raw-${{ github.run_id }}
@@ -45,19 +45,33 @@ jobs:
       - name: Karten und Preise holen (TCGdex, Scryfall, YGOPRODeck, Lorcast, One Piece)
         run: |
           mkdir -p raw mtgjson _site/data
-          python tools/pkm_fetch.py raw --refresh-prices
+          python tools/pkm_fetch.py raw --refresh-prices || echo "::warning::Pokémon-Quelle (TCGdex) nicht erreichbar, letzter Stand wird verwendet"
           python tools/others_fetch.py raw mtg ygo lor op
-          python tools/build_catalog.py raw _site/data
+
+      # auch nach einem Fehler speichern, damit der nächste Lauf auf diesem Stand aufbaut
+      - name: Rohdaten für den nächsten Lauf sichern
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: raw
+          key: raw-${{ github.run_id }}
+
+      - name: Katalog bauen
+        run: python tools/build_catalog.py raw _site/data
 
       - name: Echten Preisverlauf fortschreiben
         run: |
           mkdir -p _site/data/hist
           cp data/hist/*.json _site/data/hist/
           python tools/update_history.py _site/data
-          curl -sSfo mtgjson/AllPrices.json.xz https://mtgjson.com/api/v5/AllPrices.json.xz
-          curl -sSfo mtgjson/AllPrintings.sqlite.xz https://mtgjson.com/api/v5/AllPrintings.sqlite.xz
-          xz -d mtgjson/AllPrintings.sqlite.xz
-          python tools/mtgjson_backfill.py mtgjson _site/data
+          if [ -f _site/data/mtg.json ] \
+            && curl -sSf --retry 4 --retry-delay 30 -o mtgjson/AllPrices.json.xz https://mtgjson.com/api/v5/AllPrices.json.xz \
+            && curl -sSf --retry 4 --retry-delay 30 -o mtgjson/AllPrintings.sqlite.xz https://mtgjson.com/api/v5/AllPrintings.sqlite.xz \
+            && xz -d mtgjson/AllPrintings.sqlite.xz; then
+            python tools/mtgjson_backfill.py mtgjson _site/data
+          else
+            echo "::warning::MTGJSON heute nicht verfügbar, Magic-Verlauf nur aus dem Tagespreis"
+          fi
           cp _site/data/hist/*.json data/hist/
           python tools/split_history.py _site/data
 

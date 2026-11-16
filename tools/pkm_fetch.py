@@ -2,28 +2,36 @@
 Incremental: card details already cached are skipped unless --refresh-prices is given.
 usage: python3 -I pkm_fetch.py RAW_DIR [--refresh-prices]
 """
-import json, os, sys, time, urllib.request, concurrent.futures as cf
+import json, os, sys, time, urllib.request, urllib.error, concurrent.futures as cf
 
 RAW = sys.argv[1]
 REFRESH = "--refresh-prices" in sys.argv
 API = "https://api.tcgdex.net/v2"
 UA = {"User-Agent": "foilio-catalog/1.0"}
 
-def get(url, tries=4):
+def get(url, tries=4, patient=False):
+    """patient=True for the few list requests the whole run depends on: rides out short outages (503/429)."""
+    tries = 7 if patient else tries
     for i in range(tries):
         try:
-            with urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=40) as r:
+            with urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=60 if patient else 40) as r:
                 return json.loads(r.read())
         except Exception as e:
             if i == tries - 1:
                 raise
-            time.sleep(1.5 * (i + 1))
+            busy = isinstance(e, urllib.error.HTTPError) and e.code in (429, 500, 502, 503, 504)
+            time.sleep(min(120, 15 * 2 ** i) if patient and busy else 1.5 * (i + 1))
 
 def cached(name, url):
+    """Always fetch fresh (new sets and cards must appear); fall back to the last good copy if the source is down."""
     p = os.path.join(RAW, name)
-    if os.path.exists(p):
+    try:
+        d = get(url, patient=True)
+    except Exception as e:
+        if not os.path.exists(p):
+            raise
+        print("using last good copy of", name, "because", e, flush=True)
         return json.load(open(p))
-    d = get(url)
     json.dump(d, open(p, "w"))
     return d
 
