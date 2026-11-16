@@ -100,7 +100,7 @@ def ygo():
 # ---------------- Lorcana ----------------
 def lor():
     sets = fetch("https://api.lorcast.com/v0/sets")["results"]
-    rar = ["common", "uncommon", "rare", "super_rare", "legendary", "enchanted", "epic", "iconic", "promo", "special"]
+    rar = ["common", "uncommon", "rare", "super_rare", "legendary", "enchanted", "epic", "iconic", "promo"]
     cards, seen = [], set()
     for s in sets:
         for r in rar:

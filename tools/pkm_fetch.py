@@ -50,6 +50,7 @@ json.dump(meta, open(meta_p, "w"))
 print("sets", len(meta), flush=True)
 
 cards = cached("tcg_cards_en.json", f"{API}/en/cards")
+cached("tcg_cards_de.json", f"{API}/de/cards")  # German names, used by build_catalog.py
 skip_sets = {sid for sid, (ser, _) in set_serie.items() if ser == "tcgp"}  # TCG Pocket is digital-only
 todo = [c["id"] for c in cards if c["id"].rsplit("-", 1)[0] not in skip_sets]
 det_p = os.path.join(RAW, "tcg_details.json")
@@ -64,7 +65,7 @@ def one(cid):
                  "lo": cm.get("low"), "th": cm.get("trend-holo"), "u": cm.get("updated"), "set": (d.get("set") or {}).get("id")}
 
 done = 0
-with cf.ThreadPoolExecutor(8) as ex:
+with cf.ThreadPoolExecutor(12) as ex:
     futs = [ex.submit(one, c) for c in need]
     for f in cf.as_completed(futs):
         try:
