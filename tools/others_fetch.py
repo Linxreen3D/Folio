@@ -2,23 +2,29 @@
 Writes raw/<game>_norm.json with normalized sets + cards.
 usage: python3 -I others_fetch.py RAW_DIR [games...]
 """
-import json, os, re, sys, time, html, datetime, urllib.request, urllib.parse
+import json, os, re, sys, time, html, datetime, urllib.request, urllib.parse, urllib.error
 
 RAW = sys.argv[1]
 GAMES = sys.argv[2:] or ["mtg", "ygo", "lor", "op"]
 UA = {"User-Agent": "foilio-catalog/1.0", "Accept": "application/json;q=0.9,*/*;q=0.8"}
 TODAY = datetime.date.today()
 
-def fetch(url, tries=4, raw=False):
+def fetch(url, tries=6, raw=False):
     for i in range(tries):
         try:
             with urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=90) as r:
                 b = r.read()
                 return b if raw else json.loads(b)
-        except Exception as e:
+        except urllib.error.HTTPError as e:
+            if i == tries - 1 or e.code not in (429, 500, 502, 503, 504):
+                raise
+            # rate limited or temporarily down: honour Retry-After, otherwise back off generously
+            wait = e.headers.get("Retry-After") if e.code == 429 else None
+            time.sleep(min(180, int(wait) if wait and wait.isdigit() else 20 * (i + 1)))
+        except Exception:
             if i == tries - 1:
                 raise
-            time.sleep(2 * (i + 1))
+            time.sleep(3 * (i + 1))
 
 def num(x):
     try:
@@ -51,7 +57,7 @@ def mtg():
         cards += [norm(c) for c in d["data"]]
         url = d.get("next_page") if d.get("has_more") else None
         if page % 25 == 0: print("mtg page", page, len(cards), flush=True)
-        time.sleep(0.12)
+        time.sleep(0.2)
     # newest sets: all printings, so set pages are complete for fresh releases
     seen = {c["id"] for c in cards}
     recent = [s for s in smeta.values() if s["set_type"] in ("core", "expansion", "masters", "draft_innovation", "commander")

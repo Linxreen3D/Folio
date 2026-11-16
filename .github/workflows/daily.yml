@@ -22,7 +22,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@v4
 
@@ -33,12 +33,14 @@ jobs:
       - name: Abhängigkeiten
         run: pip install pillow ijson
 
-      - name: Kartenbilder aus dem letzten Lauf wiederverwenden
+      # Rohdaten und Kartenbilder des letzten erfolgreichen Laufs: fällt eine Quelle aus,
+      # wird ihr letzter Stand verwendet statt den ganzen Lauf abzubrechen.
+      - name: Rohdaten des letzten Laufs wiederherstellen
         uses: actions/cache@v4
         with:
-          path: raw/thumbs
-          key: thumbs-${{ github.run_id }}
-          restore-keys: thumbs-
+          path: raw
+          key: raw-${{ github.run_id }}
+          restore-keys: raw-
 
       - name: Karten und Preise holen (TCGdex, Scryfall, YGOPRODeck, Lorcast, One Piece)
         run: |
