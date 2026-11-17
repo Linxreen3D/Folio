@@ -139,6 +139,7 @@ for g, q in quota.items():
     for r in top + fresh:
         if r["id"] not in chosen: chosen.add(r["id"]); pick.append({"id": r["id"], "img": r["img"]})
 json.dump(pick, open(f"{RAW}/sprite_todo.json", "w"))
+json.dump({r["id"]: r["img"] for r in sprite_todo if r["img"]}, open(f"{RAW}/img_map.json", "w"))  # used by static_pages.py
 print(json.dumps(index["games"]), "curated", len(curated_prices), "sprites", len(pick))
 print("latest", [(s["g"], s["n"], s["d"]) for s in index["latest"]])
 print("upcoming", [(s["g"], s["n"], s["d"]) for s in index["upcoming"]][:12])

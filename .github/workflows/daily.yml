@@ -85,6 +85,24 @@ jobs:
           for f in tools/*.py; do cp "$f" "_site/tools/$(basename "$f").txt"; done
           cp .github/workflows/daily.yml _site/tools/daily-prices.yml.txt
 
+      # Backend-Zugang (öffentlich, durch Datenbank-Regeln geschützt) aus den Repository-Variablen.
+      # Ohne Variablen läuft die Seite im Vorschau-Modus, Angebote bleiben dann auf dem eigenen Gerät.
+      - name: Backend-Konfiguration schreiben
+        env:
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
+          PAYMENTS: ${{ vars.PAYMENTS }}
+        run: python tools/write_config.py _site/config.js
+
+      # Eine echte Seite pro Karte, Set und Spiel, dazu Sitemap und robots.txt (für Google und KI-Suchen)
+      - name: Kartenseiten für Google erzeugen
+        env:
+          SITE_URL_VAR: ${{ vars.SITE_URL }}
+        run: |
+          SITE_URL="${SITE_URL_VAR:-https://${GITHUB_REPOSITORY_OWNER,,}.github.io/${GITHUB_REPOSITORY#*/}}"
+          echo "Adresse: $SITE_URL"
+          python tools/static_pages.py raw _site "$SITE_URL"
+
       - name: Preisverlauf im Repository sichern
         run: |
           git config user.name "foilio-bot"
